@@ -105,6 +105,65 @@ test('every person belongs to exactly one of four teams', async ({ page }) => {
   expect(total).toBe(16);
 });
 
+test('add team creates a new team row', async ({ page }) => {
+  await page.click('#viewSeg button[data-v="team"]');
+  await expect(page.locator('#addPersonBtn')).toContainText('Add team');
+  const before = await page.locator('#gridBody .prow[data-tid]').count();
+  await page.click('#addPersonBtn');
+  await expect(page.locator('#panel h2')).toHaveText('Add team');
+  await page.fill('#tfName', 'Notifications');
+  await page.fill('#tfPart', 'Email & push delivery');
+  await page.locator('#tfSwatches .swatch').nth(5).click();
+  await page.click('#tfSave');
+  await expect(page.locator('#panel')).not.toHaveClass(/on/);
+  await expect(page.locator('#gridBody .prow[data-tid]')).toHaveCount(before + 1);
+  await expect(page.locator('#gridBody .prow[data-tid] .nm')).toContainText(['Notifications']);
+  await page.screenshot({ path: `${SHOTS}/10-add-team.png` });
+});
+
+test('add team requires a name', async ({ page }) => {
+  await page.click('#viewSeg button[data-v="team"]');
+  await page.click('#addPersonBtn');
+  await page.click('#tfSave');
+  await expect(page.locator('#tfNameField')).toHaveClass(/invalid/);
+  await expect(page.locator('#panel')).toHaveClass(/on/);
+});
+
+test('edit team updates its name in the grid', async ({ page }) => {
+  await page.click('#viewSeg button[data-v="team"]');
+  await page.locator('.prow[data-tid] .nmeta').first().click();
+  await page.click('#editTeamBtn');
+  await expect(page.locator('#panel h2')).toHaveText('Edit team');
+  await page.fill('#tfName', 'Checkout & Pay');
+  await page.click('#tfSave');
+  // returns to team panel with the new name
+  await expect(page.locator('#panel h2')).toHaveText('Checkout & Pay');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#gridBody .prow[data-tid] .nm').first()).toHaveText('Checkout & Pay');
+  await page.screenshot({ path: `${SHOTS}/11-edit-team.png` });
+});
+
+test('delete team reassigns members and removes the row', async ({ page }) => {
+  await page.click('#viewSeg button[data-v="team"]');
+  const beforeTeams = await page.locator('#gridBody .prow[data-tid]').count();
+  // member counts before (from the "N people" pills)
+  const before = await page.$$eval('.prow[data-tid] .pill', els => els.map(e => parseInt(e.textContent)));
+  const totalBefore = before.reduce((s, n) => s + n, 0);
+
+  await page.locator('.prow[data-tid] .nmeta').first().click();
+  await page.click('#editTeamBtn');
+  await page.click('#tfDelete');
+  // reassignment select appears
+  await expect(page.locator('#tfMove')).toBeVisible();
+  await page.click('#tfDelYes');
+  await expect(page.locator('#panel')).not.toHaveClass(/on/);
+
+  await expect(page.locator('#gridBody .prow[data-tid]')).toHaveCount(beforeTeams - 1);
+  // no member lost — all reassigned
+  const after = await page.$$eval('.prow[data-tid] .pill', els => els.map(e => parseInt(e.textContent)));
+  expect(after.reduce((s, n) => s + n, 0)).toBe(totalBefore);
+});
+
 test('add person creates a new row', async ({ page }) => {
   const before = await page.locator('#gridBody .prow[data-pid]').count();
   await page.click('#addPersonBtn');

@@ -354,6 +354,17 @@ body{
 .btn.danger:hover{background:var(--over-bg)}
 .confirm{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--over-fg)}
 .confirm .btn{padding:7px 13px}
+
+.swatches{display:flex;gap:9px;flex-wrap:wrap}
+.swatch{width:30px;height:30px;border-radius:8px;cursor:pointer;border:2px solid transparent;position:relative;
+  transition:transform .1s}
+.swatch:hover{transform:scale(1.08)}
+.swatch.on{box-shadow:0 0 0 2px var(--paper-2),0 0 0 4px var(--ink)}
+.swatch.on::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:14px;font-weight:700}
+.reassign{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-2);flex-wrap:wrap}
+.reassign select{font-family:inherit;font-size:12.5px;border:1px solid var(--line-2);border-radius:7px;padding:5px 8px;
+  background:var(--paper-2);color:var(--ink)}
+.reassign .btn{padding:7px 13px}
 </style>
 </head>
 <body>
@@ -515,6 +526,20 @@ function createPerson({name,role,team,weekly}){
   return p;
 }
 function deletePerson(pid){const i=PEOPLE.findIndex(p=>p.id===pid);if(i>=0)PEOPLE.splice(i,1);}
+
+let teamSeq=TEAMS.length;
+const TEAM_PALETTE=["#B5482A","#4E6CA8","#5B7A4B","#9B5B8E","#C9A23B","#2F8C82","#3E7CB1","#7A5C99","#A8632F","#4F7A6B"];
+function teamGlyph(name){return (name.trim()[0]||"?").toUpperCase();}
+function createTeam({name,part,color}){
+  const t={id:"t"+(teamSeq++),name:name.trim(),part:part.trim(),color,glyph:teamGlyph(name)};
+  TEAMS.push(t);
+  return t;
+}
+// remove a team; any members are moved to reassignTo so no allocation references dangle
+function deleteTeam(teamId,reassignTo){
+  if(reassignTo)PEOPLE.forEach(p=>{if(p.team===teamId)p.team=reassignTo;});
+  const i=TEAMS.findIndex(t=>t.id===teamId);if(i>=0)TEAMS.splice(i,1);
+}
 
 // allocation shape patterns
 const PATTERNS={
@@ -1079,6 +1104,7 @@ function openTeam(tid){
 
   showPanel(`
     <div class="ph">
+      <button class="iconbtn edit" id="editTeamBtn" title="Edit team">✎</button>
       <button class="close" onclick="closePanel()">×</button>
       <div class="ph-top">
         <span class="av-lg" style="background:${t.color}">${t.glyph}</span>
@@ -1100,6 +1126,7 @@ function openTeam(tid){
     </div>
   `);
   panel.querySelectorAll("[data-go]").forEach(el=>el.addEventListener("click",()=>openPerson(el.dataset.go)));
+  document.getElementById("editTeamBtn").addEventListener("click",()=>openTeamForm(tid));
 }
 
 /* ---------- create / edit / delete person ---------- */
@@ -1197,6 +1224,97 @@ function openPersonForm(pid){
     $("fDelYes").addEventListener("click",()=>{deletePerson(pid);renderBody();renderAvatars();closePanel();});
   });
 }
+
+/* ---------- create / edit / delete team ---------- */
+function openTeamForm(tid){
+  const editing=!!tid;
+  const t=editing?TEAMS.find(x=>x.id===tid):null;
+  const draft={
+    name:t?t.name:"",
+    part:t?t.part:"",
+    color:t?t.color:TEAM_PALETTE.find(c=>!TEAMS.some(x=>x.color===c))||TEAM_PALETTE[0],
+  };
+  const memberCount=editing?teamMembers(tid).length:0;
+  const swatches=TEAM_PALETTE.map(c=>`<span class="swatch${c===draft.color?' on':''}" data-c="${c}" style="background:${c}"></span>`).join('');
+
+  showPanel(`
+    <div class="ph">
+      <button class="close" onclick="closePanel()">×</button>
+      <div class="ph-top">
+        <span class="av-lg" id="tfAv" style="background:${draft.color}">${draft.name?teamGlyph(draft.name):'+'}</span>
+        <div><h2>${editing?'Edit team':'Add team'}</h2>
+          <div class="sub">${editing?`${memberCount} ${memberCount===1?'person':'people'} on this team`:'A group focused on one part of the app'}</div></div>
+      </div>
+    </div>
+    <div class="pbody">
+      <div class="sec">
+        <h3>Details</h3>
+        <div class="field" id="tfNameField">
+          <label>Team name</label>
+          <input type="text" id="tfName" value="${escapeAttr(draft.name)}" placeholder="e.g. Notifications" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Part of the app</label>
+          <input type="text" id="tfPart" value="${escapeAttr(draft.part)}" placeholder="e.g. Email & push delivery" autocomplete="off">
+        </div>
+      </div>
+      <div class="sec">
+        <h3>Color</h3>
+        <div class="swatches" id="tfSwatches">${swatches}</div>
+      </div>
+      <div class="form-actions" id="tfActions">
+        <button class="btn primary" id="tfSave">${editing?'Save changes':'Add team'}</button>
+        <button class="btn" onclick="closePanel()">Cancel</button>
+        ${editing?'<button class="btn danger" id="tfDelete">Delete</button>':''}
+      </div>
+    </div>
+  `);
+
+  const $=id=>document.getElementById(id);
+  const avatar=$("tfAv"), swEl=$("tfSwatches");
+  let color=draft.color;
+  const setAvatar=()=>{const n=$("tfName").value;avatar.textContent=n.trim()?teamGlyph(n):'+';};
+  swEl.addEventListener("click",e=>{const s=e.target.closest(".swatch");if(!s)return;
+    color=s.dataset.c;avatar.style.background=color;
+    [...swEl.children].forEach(x=>x.classList.toggle("on",x===s));});
+  $("tfName").addEventListener("input",setAvatar);
+
+  $("tfSave").addEventListener("click",()=>{
+    const name=$("tfName").value.trim();
+    if(!name){$("tfNameField").classList.add("invalid");$("tfName").focus();return;}
+    const part=$("tfPart").value.trim()||"—";
+    if(editing){t.name=name;t.part=part;t.color=color;t.glyph=teamGlyph(name);}
+    else{createTeam({name,part,color});}
+    renderBody();
+    if(editing) openTeam(t.id); else closePanel();
+  });
+
+  const del=$("tfDelete");
+  if(del) del.addEventListener("click",()=>{
+    const actions=$("tfActions");
+    if(TEAMS.length<=1){
+      actions.innerHTML=`<span class="confirm">Can't delete the only remaining team.</span>
+        <button class="btn" id="tfDelNo">Back</button>`;
+      $("tfDelNo").addEventListener("click",()=>openTeamForm(tid));
+      return;
+    }
+    const others=TEAMS.filter(x=>x.id!==tid);
+    const moveSel=memberCount>0
+      ? `<span class="reassign">Move ${memberCount} ${memberCount===1?'person':'people'} to
+          <select id="tfMove">${others.map(o=>`<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('')}</select></span>`
+      : `<span class="confirm">Delete <b>${escapeHtml(t.name)}</b>?</span>`;
+    actions.innerHTML=`${moveSel}
+      <button class="btn danger" id="tfDelYes">Delete</button>
+      <button class="btn" id="tfDelNo">Keep</button>`;
+    $("tfDelNo").addEventListener("click",()=>openTeamForm(tid));
+    $("tfDelYes").addEventListener("click",()=>{
+      const reassignTo=memberCount>0?$("tfMove").value:null;
+      deleteTeam(tid,reassignTo);
+      renderBody();renderAvatars();closePanel();
+    });
+  });
+}
+
 function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function escapeAttr(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
@@ -1214,10 +1332,19 @@ function seg(id,attr,fn){
 }
 seg("viewSeg","v",v=>{state.view=v;state.expanded.clear();
   document.getElementById("bigQ").textContent={person:"Who's overloaded right now?",team:"Which teams are stretched thin?",role:"Where are the gaps by role?"}[v];
-  renderBody();});
+  updateAddButton();renderBody();});
 seg("rangeSeg","r",r=>{state.range=r;renderBody();});
 seg("unitSeg","u",u=>{state.unit=u;renderBody();});
-document.getElementById("addPersonBtn").addEventListener("click",()=>openPersonForm(null));
+
+// the add button adapts to the active view (person / team)
+function updateAddButton(){
+  const btn=document.getElementById("addPersonBtn");
+  const label=state.view==="team"?"Add team":"Add person";
+  btn.innerHTML=`<span class="plus">+</span>${label}`;
+}
+document.getElementById("addPersonBtn").addEventListener("click",()=>{
+  state.view==="team"?openTeamForm(null):openPersonForm(null);
+});
 
 function renderLegend(){
   const items=[["--room-bg","Room"],["--healthy-bg","Healthy"],["--full-bg","Full"],["--over-bg","Over"]];
@@ -1230,7 +1357,7 @@ function renderAvatars(){
   document.getElementById("avatars").innerHTML=shown+extra;
 }
 
-renderLegend();renderAvatars();renderBody();
+renderLegend();renderAvatars();updateAddButton();renderBody();
 
 // scroll so "this week" is comfortably in view on load
 requestAnimationFrame(()=>{const sc=document.getElementById("scroller");const colw=parseInt(cssv("--col-w"));const namew=236;sc.scrollLeft=Math.max(0,NOW*colw - namew/2);});

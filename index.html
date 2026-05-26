@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cadence — Capacity Planning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Hanken+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4EFE4;
+  --paper-2:#FBF7EE;
+  --paper-3:#EEE7D7;
+  --ink:#211E18;
+  --ink-2:#5E574A;
+  --ink-3:#8C8475;
+  --line:rgba(33,30,24,.10);
+  --line-2:rgba(33,30,24,.18);
+  --accent:#C4561E;
+  --accent-soft:#E8B89A;
+
+  /* utilization bands */
+  --room-bg:#D9E4EF;   --room-fg:#2B5878;
+  --healthy-bg:#D2E3C6;--healthy-fg:#3E5E2C;
+  --full-bg:#F0E0B0;   --full-fg:#7A581A;
+  --over-bg:#EFCABC;   --over-fg:#9C3318;
+  --empty-fg:#B8B0A0;
+
+  --col-w:54px;
+  --name-w:236px;
+  --row-h:50px;
+
+  --shadow-sm:0 1px 2px rgba(33,30,24,.06);
+  --shadow-md:0 6px 24px -8px rgba(33,30,24,.22);
+  --shadow-lg:-24px 0 60px -28px rgba(33,30,24,.40);
+  --r:10px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Hanken Grotesk",-apple-system,sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  font-size:13px;
+  line-height:1.4;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+  background-image:
+    radial-gradient(1200px 600px at 80% -10%, rgba(196,86,30,.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(43,88,120,.05), transparent 60%);
+}
+.mono{font-family:"Geist Mono","SF Mono",monospace;font-variant-numeric:tabular-nums}
+
+/* ---------- shell ---------- */
+.app{display:flex;flex-direction:column;height:100vh}
+
+.topbar{
+  display:flex;align-items:center;gap:20px;
+  padding:14px 24px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(var(--paper-2),var(--paper-2));
+  flex:0 0 auto;
+}
+.brand{display:flex;align-items:baseline;gap:11px}
+.brand .mark{
+  font-family:"Fraunces",serif;font-weight:600;font-size:25px;letter-spacing:-.02em;
+  color:var(--ink);font-optical-sizing:auto;
+}
+.brand .mark .dot{color:var(--accent)}
+.brand .tag{font-size:11px;color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+
+.topbar .question{
+  margin-left:6px;font-family:"Fraunces",serif;font-style:italic;font-weight:500;
+  font-size:15px;color:var(--ink-2);
+}
+.topbar .spacer{flex:1}
+.topbar .meta{display:flex;align-items:center;gap:18px;color:var(--ink-2);font-size:12px}
+.topbar .meta b{color:var(--ink);font-weight:600}
+.avatars{display:flex}
+.avatars .av{width:26px;height:26px;border-radius:50%;border:2px solid var(--paper-2);margin-left:-8px;
+  display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+
+/* ---------- legend strip ---------- */
+.legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-2)}
+.legend .sw{width:13px;height:13px;border-radius:4px;display:inline-block}
+.legend .grp{display:flex;align-items:center;gap:5px;padding:0 4px}
+
+/* ---------- grid area ---------- */
+.stage{flex:1;min-height:0;display:flex;flex-direction:column;padding:16px 16px 0}
+.grid-card{
+  flex:1;min-height:0;display:flex;flex-direction:column;
+  background:var(--paper-2);
+  border:1px solid var(--line);
+  border-radius:var(--r) var(--r) 0 0;
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+}
+
+.scroller{flex:1;min-height:0;overflow:auto;position:relative}
+.scroller::-webkit-scrollbar{height:11px;width:11px}
+.scroller::-webkit-scrollbar-thumb{background:rgba(33,30,24,.2);border-radius:6px;border:3px solid var(--paper-2)}
+.scroller::-webkit-scrollbar-track{background:transparent}
+
+.row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);min-width:max-content}
+
+/* header */
+.head{position:sticky;top:0;z-index:30;background:var(--paper-3)}
+.head .cell, .head .name{height:46px}
+.head .name{align-items:center}
+.col-head{
+  width:var(--col-w);flex:0 0 var(--col-w);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border-left:1px solid var(--line);gap:1px;cursor:default;
+}
+.col-head .dnum{font-size:13px;font-weight:600;color:var(--ink);font-family:"Geist Mono",monospace}
+.col-head .dmon{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.col-head.now{background:linear-gradient(180deg,rgba(196,86,30,.16),rgba(196,86,30,.04))}
+.col-head.now .dnum{color:var(--accent)}
+.col-head.now .dmon{color:var(--accent)}
+
+/* totals row */
+.totals{position:sticky;top:46px;z-index:25;background:#26221B}
+.totals .name{background:#26221B;color:var(--paper);align-items:center}
+.totals .name .tt{display:flex;flex-direction:column}
+.totals .name .tt b{font-family:"Fraunces",serif;font-size:13px;font-weight:600;color:var(--paper)}
+.totals .name .tt span{font-size:10px;color:#A89E8C;letter-spacing:.04em}
+.totals .tcell{
+  width:var(--col-w);flex:0 0 var(--col-w);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;border-left:1px solid rgba(255,255,255,.07);gap:1px;
+}
+.totals .tcell .th{font-family:"Geist Mono",monospace;font-size:12px;font-weight:600;color:var(--paper)}
+.totals .tcell .tbar{width:26px;height:3px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
+.totals .tcell .tbar i{display:block;height:100%}
+.totals .tcell.now{background:rgba(196,86,30,.32)}
+
+/* name column (sticky left) */
+.name{
+  width:var(--name-w);flex:0 0 var(--name-w);
+  position:sticky;left:0;z-index:10;
+  background:var(--paper-2);
+  display:flex;align-items:center;gap:10px;padding:0 12px 0 10px;
+  border-right:1px solid var(--line-2);
+}
+.head .name{background:var(--paper-3);z-index:31}
+.corner-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+
+/* body rows */
+.prow{display:flex;align-items:stretch;min-width:max-content;height:var(--row-h);cursor:pointer;transition:background .12s}
+.prow:hover{background:rgba(33,30,24,.025)}
+.prow .name:hover{background:var(--paper-3)}
+.prow .name{flex-direction:row}
+.chev{width:16px;flex:0 0 16px;display:grid;place-items:center;color:var(--ink-3);
+  transition:transform .18s;font-size:10px;border-radius:4px}
+.chev:hover{background:rgba(33,30,24,.08);color:var(--ink)}
+.prow.expanded .chev{transform:rotate(90deg)}
+.av-sq{width:30px;height:30px;flex:0 0 30px;border-radius:8px;display:grid;place-items:center;
+  font-size:11px;font-weight:700;color:#fff;letter-spacing:.02em}
+.nmeta{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.nmeta .nm{font-weight:600;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nmeta .nr{font-size:10.5px;color:var(--ink-3);display:flex;gap:6px;align-items:center;white-space:nowrap}
+.nmeta .nr .pill{background:var(--paper-3);border-radius:20px;padding:0 6px;font-weight:600;font-size:9.5px;
+  color:var(--ink-2);letter-spacing:.02em;display:inline-flex;align-items:center;gap:4px}
+.nmeta .nr .pill .tdot{width:6px;height:6px;border-radius:50%;flex:0 0 6px}
+.flag-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(196,86,30,.16)}
+
+/* utilization cell */
+.cell{
+  width:var(--col-w);flex:0 0 var(--col-w);
+  border-left:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  position:relative;cursor:cell;
+}
+.cell .v{font-family:"Geist Mono",monospace;font-size:12.5px;font-weight:500;z-index:1}
+.cell .vsub{font-size:8.5px;font-family:"Geist Mono",monospace;opacity:.7;z-index:1;margin-top:-1px}
+.cell.now::after{content:"";position:absolute;inset:0;box-shadow:inset 2px 0 0 rgba(196,86,30,.5),inset -2px 0 0 rgba(196,86,30,.5)}
+.cell .fill{position:absolute;inset:3px;border-radius:6px}
+.cell.empty .v{color:var(--empty-fg);font-weight:400}
+
+/* now column tint behind everything */
+.nowcol-tint{position:absolute;top:0;bottom:0;width:var(--col-w);
+  background:repeating-linear-gradient(180deg,rgba(196,86,30,.05),rgba(196,86,30,.05) 6px,transparent 6px,transparent 12px);
+  pointer-events:none;z-index:1}
+
+/* expansion lanes */
+.lanes{background:rgba(33,30,24,.022);border-bottom:1px solid var(--line)}
+.lane{display:flex;height:26px;border-top:1px dashed var(--line)}
+.lane:first-child{border-top:none}
+.lane .lname{
+  width:var(--name-w);flex:0 0 var(--name-w);position:sticky;left:0;z-index:9;
+  background:var(--paper-2);display:flex;align-items:center;gap:8px;
+  padding-left:38px;border-right:1px solid var(--line-2);font-size:11px;color:var(--ink-2);
+}
+.lane .lswatch{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+.lane .lname .lh{margin-left:auto;padding-right:10px;font-family:"Geist Mono",monospace;font-size:10px;color:var(--ink-3)}
+.lcell{width:var(--col-w);flex:0 0 var(--col-w);border-left:1px solid var(--line);
+  display:grid;place-items:center;position:relative}
+.lcell .lbar{height:14px;border-radius:4px;width:calc(100% - 8px);display:grid;place-items:center;
+  font-family:"Geist Mono",monospace;font-size:9.5px;font-weight:600;color:#fff;cursor:cell}
+.lcell.pto .lbar{background:repeating-linear-gradient(45deg,#9C8F78,#9C8F78 3px,#B5A88f 3px,#B5A88f 6px);color:#3a3326}
+.lcell input{width:calc(100% - 6px);height:18px;border:1.5px solid var(--accent);border-radius:4px;
+  text-align:center;font-family:"Geist Mono",monospace;font-size:11px;background:#fff;outline:none}
+
+/* role view triple cell */
+.cell.role{justify-content:center;gap:0;padding:3px 0}
+.cell.role .r1,.cell.role .r2,.cell.role .r3{font-family:"Geist Mono",monospace;line-height:1.25}
+.cell.role .r1{font-size:11px;font-weight:600;color:var(--ink)}
+.cell.role .r2{font-size:11px;font-weight:600}
+.cell.role .r3{font-size:10px;color:var(--accent);font-weight:600}
+.cell.role .rdiv{width:18px;height:1px;background:var(--line-2);margin:1px 0}
+
+/* ---------- bottom toolbar ---------- */
+.toolbar{
+  flex:0 0 auto;display:flex;align-items:center;gap:14px;
+  padding:10px 20px;background:var(--paper-2);
+  border-top:1px solid var(--line-2);
+}
+.seg{display:inline-flex;background:var(--paper-3);border-radius:9px;padding:3px;gap:2px;border:1px solid var(--line)}
+.seg button{
+  border:0;background:transparent;font-family:inherit;font-size:12px;font-weight:600;
+  color:var(--ink-2);padding:5px 13px;border-radius:6px;cursor:pointer;transition:.12s;letter-spacing:.01em;
+}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--paper-2);color:var(--ink);box-shadow:var(--shadow-sm)}
+.seg.dark button.on{background:var(--ink);color:var(--paper)}
+.tlabel{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.toolbar .spacer{flex:1}
+.toolbar .hint{font-size:11.5px;color:var(--ink-3)}
+.toolbar .hint b{color:var(--ink-2);font-weight:600}
+
+/* ---------- detail panel ---------- */
+.scrim{position:fixed;inset:0;background:rgba(33,30,24,.28);backdrop-filter:blur(2px);opacity:0;
+  pointer-events:none;transition:opacity .25s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.panel{
+  position:fixed;top:0;right:0;height:100vh;width:min(560px,94vw);
+  background:var(--paper-2);box-shadow:var(--shadow-lg);
+  transform:translateX(100%);transition:transform .32s cubic-bezier(.22,.61,.36,1);
+  z-index:41;display:flex;flex-direction:column;
+  border-left:1px solid var(--line-2);
+}
+.panel.on{transform:none}
+.panel .ph{padding:22px 26px 18px;border-bottom:1px solid var(--line);position:relative;
+  background:linear-gradient(180deg,var(--paper-3),var(--paper-2))}
+.panel .close{position:absolute;top:18px;right:20px;width:30px;height:30px;border-radius:8px;border:1px solid var(--line-2);
+  background:var(--paper-2);cursor:pointer;font-size:16px;color:var(--ink-2);display:grid;place-items:center;line-height:1}
+.panel .close:hover{background:var(--paper-3);color:var(--ink)}
+.ph-top{display:flex;align-items:center;gap:14px}
+.ph-top .av-lg{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:17px}
+.ph-top h2{font-family:"Fraunces",serif;font-size:23px;font-weight:600;letter-spacing:-.01em;line-height:1.05}
+.ph-top .sub{color:var(--ink-2);font-size:12.5px;margin-top:2px}
+.ph-stats{display:flex;gap:0;margin-top:18px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--paper-2)}
+.ph-stats .st{flex:1;padding:10px 14px;border-left:1px solid var(--line)}
+.ph-stats .st:first-child{border-left:0}
+.ph-stats .st .lab{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.ph-stats .st .num{font-family:"Geist Mono",monospace;font-size:19px;font-weight:600;margin-top:2px}
+.ph-stats .st .num small{font-size:11px;color:var(--ink-3);font-weight:500}
+
+.pbody{flex:1;overflow:auto;padding:22px 26px 40px}
+.sec{margin-bottom:26px}
+.sec h3{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin-bottom:12px;
+  display:flex;align-items:center;gap:8px}
+.sec h3::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* mini timeline */
+.tl{display:flex;flex-direction:column;gap:6px}
+.tl-row{display:flex;align-items:center;gap:10px}
+.tl-row .tl-label{width:120px;flex:0 0 120px;font-size:11.5px;color:var(--ink-2);display:flex;align-items:center;gap:7px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-row .tl-label .sw{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+.tl-track{flex:1;height:18px;display:flex;gap:2px;background:var(--paper-3);border-radius:5px;padding:2px;overflow:hidden}
+.tl-track .tk{flex:1;border-radius:2px;min-width:0}
+
+/* plannable breakdown bar */
+.pbar{height:34px;border-radius:9px;overflow:hidden;display:flex;border:1px solid var(--line)}
+.pbar .seg-b{display:grid;place-items:center;color:#fff;font-size:10px;font-weight:700;min-width:0;overflow:hidden}
+.pblegend{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-top:14px}
+.pblegend .pl{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.pblegend .pl .sw{width:10px;height:10px;border-radius:3px}
+.pblegend .pl b{margin-left:auto;font-family:"Geist Mono",monospace;color:var(--ink);font-weight:600}
+
+/* conflicts */
+.conflict{display:flex;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;
+  background:var(--paper-2);align-items:flex-start}
+.conflict.warn{border-color:var(--over-bg);background:linear-gradient(var(--paper-2),var(--paper-2)) padding-box,
+  rgba(156,51,24,.04)}
+.conflict .ico{width:22px;height:22px;flex:0 0 22px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:700}
+.conflict.warn .ico{background:var(--over-bg);color:var(--over-fg)}
+.conflict.info .ico{background:var(--full-bg);color:var(--full-fg)}
+.conflict .ctxt{font-size:12px;color:var(--ink-2);line-height:1.45}
+.conflict .ctxt b{color:var(--ink);font-weight:600}
+
+/* allocation list */
+.alloc{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line)}
+.alloc .sw{width:11px;height:11px;border-radius:3px;flex:0 0 11px}
+.alloc .anm{font-size:12.5px;font-weight:600;flex:1}
+.alloc .apat{font-size:10.5px;color:var(--ink-3);background:var(--paper-3);border-radius:20px;padding:2px 9px;font-weight:600}
+.alloc .ah{font-family:"Geist Mono",monospace;font-size:13px;font-weight:600}
+.alloc .ah input{width:46px;border:1px solid var(--line-2);border-radius:6px;padding:3px 5px;text-align:right;
+  font-family:"Geist Mono",monospace;font-size:12px;background:var(--paper-2)}
+.alloc .ah input:focus{outline:none;border-color:var(--accent);background:#fff}
+
+/* project specific */
+.demand-row{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px}
+.demand-row .drole{font-weight:600;font-size:12.5px;width:90px;flex:0 0 90px}
+.demand-row .dtrack{flex:1;height:20px;border-radius:5px;background:var(--paper-3);overflow:hidden;display:flex}
+.demand-row .dtrack .filled{background:var(--healthy-bg)}
+.demand-row .dtrack .gap{background:repeating-linear-gradient(45deg,var(--over-bg),var(--over-bg) 4px,transparent 4px,transparent 8px)}
+.demand-row .dnums{font-family:"Geist Mono",monospace;font-size:11px;color:var(--ink-2);width:78px;flex:0 0 78px;text-align:right}
+
+.empty-note{color:var(--ink-3);font-size:12px;font-style:italic}
+.kbd{font-family:"Geist Mono",monospace;font-size:10px;background:var(--paper-3);border:1px solid var(--line-2);
+  border-radius:4px;padding:1px 5px;color:var(--ink-2)}
+
+/* ---------- add-person button + form ---------- */
+.addbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--paper-2);
+  color:var(--ink);font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;
+  box-shadow:var(--shadow-sm);transition:.12s}
+.addbtn:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.addbtn .plus{font-size:15px;line-height:1;margin-top:-1px}
+.iconbtn{position:absolute;top:18px;width:30px;height:30px;border-radius:8px;border:1px solid var(--line-2);
+  background:var(--paper-2);cursor:pointer;font-size:13px;color:var(--ink-2);display:grid;place-items:center;line-height:1}
+.iconbtn:hover{background:var(--paper-3);color:var(--ink)}
+.iconbtn.edit{right:60px}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:700;margin-bottom:6px}
+.field input[type=text],.field select{width:100%;font-family:inherit;font-size:13.5px;color:var(--ink);
+  background:var(--paper-2);border:1px solid var(--line-2);border-radius:8px;padding:9px 11px;outline:none}
+.field input[type=text]:focus,.field select:focus{border-color:var(--accent);background:#fff}
+.field.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field.invalid input{border-color:var(--over-fg);background:rgba(156,51,24,.05)}
+
+.hours-pick{display:flex;align-items:center;gap:10px}
+.hours-pick .seg button{padding:7px 15px;font-size:13px}
+.hours-pick .custom{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3)}
+.hours-pick .custom input{width:58px;font-family:"Geist Mono",monospace;font-size:13px;text-align:center;
+  border:1px solid var(--line-2);border-radius:7px;padding:6px 4px;background:var(--paper-2);outline:none}
+.hours-pick .custom input:focus{border-color:var(--accent);background:#fff}
+.readout{margin-top:14px;font-size:13px;color:var(--ink-2);background:var(--paper-3);border:1px solid var(--line);
+  border-radius:9px;padding:11px 13px;line-height:1.4}
+.readout b{font-family:"Geist Mono",monospace;color:var(--ink);font-weight:600}
+.readout .big{color:var(--healthy-fg);font-size:15px}
+
+.form-actions{display:flex;gap:10px;margin-top:28px;align-items:center}
+.btn{font-family:inherit;font-size:13px;font-weight:600;padding:10px 18px;border-radius:9px;cursor:pointer;border:1px solid var(--line-2);
+  background:var(--paper-2);color:var(--ink);transition:.12s}
+.btn:hover{background:var(--paper-3)}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn.primary:hover{background:#000}
+.btn.danger{margin-left:auto;color:var(--over-fg);border-color:var(--over-bg);background:transparent}
+.btn.danger:hover{background:var(--over-bg)}
+.confirm{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--over-fg)}
+.confirm .btn{padding:7px 13px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">Cadence<span class="dot">.</span></span>
+      <span class="tag">Capacity</span>
+    </div>
+    <span class="question" id="bigQ">Can we deliver the roadmap?</span>
+    <div class="spacer"></div>
+    <div class="legend" id="legend"></div>
+    <div class="meta">
+      <span><b id="teamCount">—</b> people</span>
+      <div class="avatars" id="avatars"></div>
+    </div>
+    <button class="addbtn" id="addPersonBtn"><span class="plus">+</span>Add person</button>
+  </header>
+
+  <div class="stage">
+    <div class="grid-card">
+      <div class="scroller" id="scroller">
+        <div id="gridHead"></div>
+        <div id="gridTotals"></div>
+        <div id="gridBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="toolbar">
+    <span class="tlabel">View</span>
+    <div class="seg dark" id="viewSeg">
+      <button data-v="person" class="on">By Person</button>
+      <button data-v="team">By Team</button>
+      <button data-v="role">By Role</button>
+    </div>
+    <span class="tlabel" style="margin-left:8px">Range</span>
+    <div class="seg" id="rangeSeg">
+      <button data-r="week" class="on">Week</button>
+      <button data-r="month">Month</button>
+      <button data-r="quarter">Quarter</button>
+      <button data-r="year">Year</button>
+    </div>
+    <span class="tlabel" style="margin-left:8px">Units</span>
+    <div class="seg" id="unitSeg">
+      <button data-u="hours" class="on">Hours</button>
+      <button data-u="percent">%</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="hint">Click a cell to edit · click a name to drill in · <span class="kbd">esc</span> closes</div>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel"></aside>
+
+<script>
+/* ============================================================
+   DATA MODEL
+   ============================================================ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rnd = mulberry32(20260526);
+const ri=(a,b)=>Math.floor(rnd()*(b-a+1))+a;
+const pick=arr=>arr[Math.floor(rnd()*arr.length)];
+
+const NWEEKS=26, NOW=4;            // 26 weeks, "this week" at index 4
+const START=new Date(2026,3,27);   // Mon Apr 27 2026
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function weekDate(i){const d=new Date(START);d.setDate(d.getDate()+i*7);return d;}
+
+const ROLES=[
+  {id:"fe",name:"Frontend",color:"#3E7CB1"},
+  {id:"be",name:"Backend", color:"#6B8E4E"},
+  {id:"qa",name:"QA",      color:"#C9A23B"},
+  {id:"ux",name:"UX",      color:"#8E5BA6"},
+  {id:"do",name:"DevOps",  color:"#2F8C82"},
+];
+
+const PROJECTS=[
+  {id:"chk",name:"Checkout v2",      color:"#C4561E"},
+  {id:"mob",name:"Mobile App",       color:"#3E7CB1"},
+  {id:"dat",name:"Data Platform",    color:"#6B8E4E"},
+  {id:"srch",name:"Search Relevance",color:"#8E5BA6"},
+  {id:"bill",name:"Billing Migration",color:"#C9A23B"},
+  {id:"ds",name:"Design System",     color:"#2F8C82"},
+];
+
+const AVCOL=["#C4561E","#3E7CB1","#6B8E4E","#8E5BA6","#2F8C82","#C9A23B","#9C3318","#2B5878","#5E574A"];
+
+// teams: a cross-functional group focused on one part of the app
+const TEAMS=[
+  {id:"t0",name:"Checkout", color:"#B5482A",glyph:"C",part:"Payments flow"},
+  {id:"t1",name:"Discovery",color:"#4E6CA8",glyph:"D",part:"Search & browse"},
+  {id:"t2",name:"Platform", color:"#5B7A4B",glyph:"P",part:"Core services"},
+  {id:"t3",name:"Mobile",   color:"#9B5B8E",glyph:"M",part:"iOS & Android"},
+];
+// per-person team, indexed to PEOPLE_DEF order below
+const TEAM_OF=["t0","t1","t3","t3","t0","t1","t2","t2","t0","t2","t0","t3","t1","t1","t2","t3"];
+
+// plannable hours by seniority profile (40h on paper, minus overhead)
+// breakdown categories: project, meetings, mgmt, oncall, admin
+function profile(kind){
+  switch(kind){
+    case "vp":     return {weekly:40, plannable:12, b:{project:12,meetings:14,mgmt:10,oncall:0,admin:4}};
+    case "em":     return {weekly:40, plannable:18, b:{project:18,meetings:10,mgmt:9,oncall:0,admin:3}};
+    case "lead":   return {weekly:40, plannable:26, b:{project:26,meetings:6,mgmt:4,oncall:1,admin:3}};
+    case "senior": return {weekly:40, plannable:31, b:{project:31,meetings:4,mgmt:0,oncall:2,admin:3}};
+    default:       return {weekly:40, plannable:33, b:{project:33,meetings:3,mgmt:0,oncall:1,admin:3}};
+  }
+}
+
+const PEOPLE_DEF=[
+  ["Dana Whitfield","fe","lead"],   ["Iris Cho","fe","senior"], ["Marco Lveque","fe","ic"], ["Priya Nandakumar","fe","ic"],
+  ["Sam Okafor","be","lead"],       ["Lena Vogt","be","senior"],["Tariq Haddad","be","ic"], ["Yuki Tanaka","be","senior"],
+  ["Bea Romano","qa","senior"],     ["Owen Frye","qa","ic"],
+  ["Noa Lindgren","ux","lead"],     ["Hugo Mart","ux","ic"],   ["Ada Sefer","ux","senior"],
+  ["Rafael Costa","do","senior"],   ["Jin Park","do","ic"],
+  ["Chris Beaumont","fe","em"],
+];
+
+let pid=0;
+const PEOPLE=PEOPLE_DEF.map((d,i)=>{
+  const [name,role,kind]=d;
+  const pr=profile(kind);
+  const parts=name.replace(/[^\w\s]/g,'').split(" ");
+  const initials=((parts[0]||" ")[0]+(parts[1]||" ")[0]).toUpperCase();
+  return {id:"p"+(pid++),name,role,kind,team:TEAM_OF[i],
+    title:roleTitle(role,kind),
+    weekly:pr.weekly, plannable:pr.plannable, overhead:pr.weekly-pr.plannable, breakdown:pr.b,
+    initials, color:AVCOL[i%AVCOL.length],
+    alloc:{}, pto:{}};
+});
+function roleTitle(role,kind){
+  const rn=ROLES.find(r=>r.id===role).name;
+  if(kind==="vp")return "VP of Engineering";
+  if(kind==="em")return rn+" Manager";
+  if(kind==="lead")return rn+" Lead";
+  if(kind==="senior")return "Senior "+rn+" Engineer";
+  return rn+" Engineer";
+}
+// plannable derives from configured weekly hours minus role overhead (meetings, mgmt, on-call, admin)
+function recalcPerson(p){
+  p.plannable=Math.max(0,p.weekly-p.overhead);
+  p.breakdown.project=p.plannable;
+}
+function initialsOf(name){
+  const parts=name.trim().replace(/[^\w\s]/g,'').split(/\s+/);
+  return ((parts[0]||" ")[0]+(parts[1]||" ")[0]).toUpperCase()||"?";
+}
+function createPerson({name,role,team,weekly}){
+  const pr=profile("ic");
+  const p={id:"p"+(pid++),name:name.trim(),role,kind:"ic",team,
+    title:roleTitle(role,"ic"),
+    weekly, overhead:pr.weekly-pr.plannable, breakdown:{...pr.b},
+    initials:initialsOf(name), color:AVCOL[pid%AVCOL.length],
+    alloc:{}, pto:{}};
+  recalcPerson(p);
+  PEOPLE.push(p);
+  return p;
+}
+function deletePerson(pid){const i=PEOPLE.findIndex(p=>p.id===pid);if(i>=0)PEOPLE.splice(i,1);}
+
+// allocation shape patterns
+const PATTERNS={
+  "New epic developer":(t)=>Math.min(1,0.35+1.0*t),                 // ramp up
+  "QA engagement":     (t)=>0.4+0.6*Math.sin(Math.PI*Math.min(1,t*1.1)), // bell-ish
+  "Launch crunch":     (t)=>0.5+0.5*Math.pow(t,2),                  // back-loaded
+  "Discovery spike":   (t)=>Math.max(0.15,1-1.1*t),                 // taper
+  "Steady maintenance":(t)=>0.85+0.1*Math.sin(t*6),                 // flat
+  "Peak & taper":      (t)=>1-Math.pow(2*t-1,2)*0.7,                // hump
+};
+const PATNAMES=Object.keys(PATTERNS);
+
+// generate engagements
+PEOPLE.forEach(p=>{
+  if(p.kind==="vp"||p.kind==="em"){ // managers: light, steady oversight on 1-2
+    const projs=shuffle([...PROJECTS]).slice(0,2);
+    projs.forEach((pj,k)=>{
+      addEngagement(p,pj.id,0,NWEEKS-1,"Steady maintenance",p.plannable*(k===0?0.6:0.4));
+    });
+    return;
+  }
+  const n=ri(1,3);
+  const projs=shuffle([...PROJECTS]).slice(0,n);
+  projs.forEach((pj,k)=>{
+    const start=ri(0,Math.max(0,NWEEKS-10));
+    const len=ri(7,NWEEKS-start);
+    const end=Math.min(NWEEKS-1,start+len-1);
+    const pat=pick(PATNAMES);
+    const peak=Math.round((p.plannable*(0.55+rnd()*0.55))/ (n>2?1.6:1) /2)*2;
+    addEngagement(p,pj.id,start,end,pat,Math.max(4,peak));
+  });
+});
+function addEngagement(p,projId,start,end,pat,peak){
+  const fn=PATTERNS[pat];const span=Math.max(1,end-start);
+  if(!p.alloc[projId])p.alloc[projId]={pattern:pat,w:{}};
+  else p.alloc[projId].pattern=pat;
+  for(let i=start;i<=end;i++){
+    const t=span===0?0:(i-start)/span;
+    const h=Math.max(0,Math.round(peak*fn(t)/2)*2);
+    p.alloc[projId].w[i]=(p.alloc[projId].w[i]||0)+h;
+  }
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+// PTO blocks for a few
+[["p2",10,11],["p6",6,6],["p9",18,19],["p11",2,3]].forEach(([id,s,e])=>{
+  const p=PEOPLE.find(x=>x.id===id);if(!p)return;for(let i=s;i<=e;i++)p.pto[i]=40;
+});
+
+// pipeline demand: unassigned hours per role per week (grows in future)
+const PIPELINE={};
+ROLES.forEach(r=>{
+  PIPELINE[r.id]={};
+  for(let i=0;i<NWEEKS;i++){
+    const future=Math.max(0,(i-NOW)/(NWEEKS-NOW));
+    let base= i<NOW? ri(0,8) : Math.round((ri(0,20)+future*60));
+    if(r.id==="qa")base=Math.round(base*1.3);
+    if(r.id==="do")base=Math.round(base*0.8);
+    PIPELINE[r.id][i]=Math.round(base/4)*4;
+  }
+});
+
+/* ---------- derived helpers ---------- */
+function personWeekTotal(p,i){let s=0;for(const k in p.alloc)s+=p.alloc[k].w[i]||0;return s;}
+function personPlannable(p,i){return p.pto[i]?0:p.plannable;}
+function personProjectsActive(p,i){let c=0;for(const k in p.alloc)if((p.alloc[k].w[i]||0)>0)c++;return c;}
+
+function roleCapacity(roleId,i){let s=0;PEOPLE.forEach(p=>{if(p.role===roleId)s+=personPlannable(p,i);});return s;}
+function roleCommitted(roleId,i){let s=0;PEOPLE.forEach(p=>{if(p.role===roleId)s+=personWeekTotal(p,i);});return s;}
+
+function teamMembers(teamId){return PEOPLE.filter(p=>p.team===teamId);}
+function teamOverCount(teamId){return teamMembers(teamId).filter(p=>{for(let i=NOW;i<NWEEKS;i++){const pl=personPlannable(p,i);if(pl>0&&personWeekTotal(p,i)/pl>1)return true;}return false;}).length;}
+
+/* ============================================================
+   STATE + UTIL COLOR
+   ============================================================ */
+const state={view:"person",range:"week",unit:"hours",expanded:new Set()};
+
+function utilBand(ratio){
+  if(ratio<=0)return null;
+  if(ratio<=0.6)return {bg:"--room-bg",fg:"--room-fg"};
+  if(ratio<=0.9)return {bg:"--healthy-bg",fg:"--healthy-fg"};
+  if(ratio<=1.0)return {bg:"--full-bg",fg:"--full-fg"};
+  return {bg:"--over-bg",fg:"--over-fg"};
+}
+function cssv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+/* ---------- column model (aggregation) ---------- */
+function buildColumns(){
+  const cols=[];
+  if(state.range==="week"){
+    for(let i=0;i<NWEEKS;i++){const d=weekDate(i);
+      cols.push({weeks:[i],top:String(d.getDate()).padStart(2,"0"),bot:MON[d.getMonth()],now:i===NOW});}
+  }else if(state.range==="month"){
+    const byMonth={};for(let i=0;i<NWEEKS;i++){const d=weekDate(i);const key=d.getFullYear()+"-"+d.getMonth();(byMonth[key]=byMonth[key]||{m:d.getMonth(),y:d.getFullYear(),weeks:[]}).weeks.push(i);}
+    Object.values(byMonth).forEach(g=>cols.push({weeks:g.weeks,top:MON[g.m],bot:"'"+String(g.y).slice(2),now:g.weeks.includes(NOW)}));
+  }else if(state.range==="quarter"){
+    const byQ={};for(let i=0;i<NWEEKS;i++){const d=weekDate(i);const q=Math.floor(d.getMonth()/3);const key=d.getFullYear()+"-"+q;(byQ[key]=byQ[key]||{q,y:d.getFullYear(),weeks:[]}).weeks.push(i);}
+    Object.values(byQ).forEach(g=>cols.push({weeks:g.weeks,top:"Q"+(g.q+1),bot:String(g.y),now:g.weeks.includes(NOW)}));
+  }else{
+    cols.push({weeks:[...Array(NWEEKS).keys()],top:"FY26",bot:"26 wks",now:true});
+  }
+  return cols;
+}
+
+/* aggregate across a set of week indices: returns avg ratio + total/avg hours */
+function aggPerson(p,weeks){
+  let alloc=0,plan=0;weeks.forEach(i=>{alloc+=personWeekTotal(p,i);plan+=personPlannable(p,i);});
+  const avgAlloc=alloc/weeks.length, avgPlan=plan/weeks.length;
+  return {alloc,plan,avgAlloc,avgPlan,ratio:avgPlan>0?avgAlloc/avgPlan:(avgAlloc>0?2:0)};
+}
+
+/* ============================================================
+   RENDER GRID
+   ============================================================ */
+const COLS=()=>buildColumns();
+
+function fmtHours(h){return Math.round(h);}
+function fmtCell(value,ratio){
+  if(state.unit==="percent")return Math.round(ratio*100)+"%";
+  return fmtHours(value);
+}
+
+function renderHead(cols){
+  const colw=(state.range==="week")?54:(state.range==="month"?72:(state.range==="quarter"?108:160));
+  document.documentElement.style.setProperty("--col-w",colw+"px");
+  const head=document.getElementById("gridHead");
+  const cornerLabel={person:"Teammate",team:"Team",role:"Discipline"}[state.view];
+  let h=`<div class="row head"><div class="name"><span class="corner-label">${cornerLabel}</span></div>`;
+  cols.forEach(c=>{h+=`<div class="col-head${c.now?" now":""}"><span class="dnum">${c.top}</span><span class="dmon">${c.bot}</span></div>`;});
+  head.innerHTML=h+"</div>";
+}
+
+function renderTotals(cols){
+  const el=document.getElementById("gridTotals");
+  const totalsSub={person:"team allocated · utilization",team:"org capacity vs committed",role:"capacity vs committed"}[state.view];
+  let h=`<div class="row totals"><div class="name"><div class="tt"><b>Planned Totals</b><span>${totalsSub}</span></div></div>`;
+  cols.forEach(c=>{
+    let alloc=0,plan=0;
+    PEOPLE.forEach(p=>c.weeks.forEach(i=>{alloc+=personWeekTotal(p,i);plan+=personPlannable(p,i);}));
+    const ratio=plan>0?alloc/plan:0;
+    const band=utilBand(ratio);
+    const barcol=band?cssv("--"+band.bg.replace("--","")):"rgba(255,255,255,.2)";
+    const disp=state.unit==="percent"?Math.round(ratio*100)+"%":Math.round(alloc/c.weeks.length);
+    h+=`<div class="tcell${c.now?" now":""}"><span class="th">${disp}</span><span class="tbar"><i style="width:${Math.min(100,ratio*100)}%;background:${tone(ratio)}"></i></span></div>`;
+  });
+  el.innerHTML=h+"</div>";
+}
+function tone(r){if(r<=0.6)return"#7FB0D6";if(r<=0.9)return"#9BC77F";if(r<=1)return"#E3C268";return"#E08763";}
+
+function renderBody(){
+  const cols=COLS();
+  renderHead(cols);renderTotals(cols);
+  const body=document.getElementById("gridBody");
+  body.innerHTML = state.view==="person" ? personRows(cols) : state.view==="team" ? teamRows(cols) : roleRows(cols);
+  wireGrid();
+}
+
+function personRows(cols){
+  let html="";
+  PEOPLE.forEach(p=>{
+    const flags=personConflicts(p).length;
+    const exp=state.expanded.has(p.id);
+    html+=`<div class="prow${exp?" expanded":""}" data-pid="${p.id}">
+      <div class="name">
+        <span class="chev" data-act="expand">▶</span>
+        <span class="av-sq" style="background:${p.color}">${p.initials}</span>
+        <span class="nmeta">
+          <span class="nm">${p.name}</span>
+          <span class="nr"><span class="pill" title="${TEAMS.find(t=>t.id===p.team).name} team"><span class="tdot" style="background:${TEAMS.find(t=>t.id===p.team).color}"></span>${ROLES.find(r=>r.id===p.role).name}</span>${p.plannable}h plan ${flags?'<span class="flag-dot" title="'+flags+' signal(s)"></span>':''}</span>
+        </span>
+      </div>`;
+    cols.forEach(c=>{
+      const a=aggPerson(p,c.weeks);
+      const band=utilBand(a.ratio);
+      const isPTO=c.weeks.length===1 && p.pto[c.weeks[0]];
+      const fill = band? `<span class="fill" style="background:${cssv('--'+band.bg.replace('--',''))}"></span>`:"";
+      const fg = band? cssv('--'+band.fg.replace('--','')) : "var(--empty-fg)";
+      const val = a.avgAlloc<0.5 && !isPTO ? `<span class="v" style="color:var(--empty-fg)">·</span>`
+        : `<span class="v" style="color:${fg}">${fmtCell(a.avgAlloc,a.ratio)}</span>`;
+      html+=`<div class="cell${band?'':' empty'}${c.now?' now':''}" data-pid="${p.id}" data-wk="${c.weeks.join(',')}">${fill}${val}</div>`;
+    });
+    html+="</div>";
+    if(exp)html+=laneRows(p,cols);
+  });
+  return html;
+}
+
+function laneRows(p,cols){
+  let h=`<div class="lanes" data-lanes="${p.id}">`;
+  const projIds=Object.keys(p.alloc).filter(k=>cols.some(c=>c.weeks.some(i=>(p.alloc[k].w[i]||0)>0)));
+  projIds.forEach(pjId=>{
+    const pj=PROJECTS.find(x=>x.id===pjId);
+    let tot=0;cols.forEach(c=>c.weeks.forEach(i=>tot+=p.alloc[pjId].w[i]||0));
+    h+=`<div class="lane"><div class="lname"><span class="lswatch" style="background:${pj.color}"></span>${pj.name}<span class="lh">${Math.round(tot)}h</span></div>`;
+    cols.forEach(c=>{
+      let v=0;c.weeks.forEach(i=>v+=p.alloc[pjId].w[i]||0);
+      const avg=v/c.weeks.length;
+      const wkAttr=c.weeks.join(',');
+      const intensity=Math.min(1,avg/Math.max(1,p.plannable));
+      h+=`<div class="lcell" data-pid="${p.id}" data-proj="${pjId}" data-wk="${wkAttr}">${avg>0.4?`<span class="lbar" style="background:${pj.color};opacity:${0.45+0.55*intensity}">${Math.round(avg)}</span>`:''}</div>`;
+    });
+    h+="</div>";
+  });
+  // PTO lane
+  const hasPTO=cols.some(c=>c.weeks.some(i=>p.pto[i]));
+  if(hasPTO){
+    h+=`<div class="lane"><div class="lname"><span class="lswatch" style="background:#9C8F78"></span>Time off<span class="lh"></span></div>`;
+    cols.forEach(c=>{let v=0;c.weeks.forEach(i=>{if(p.pto[i])v++;});
+      h+=`<div class="lcell pto">${v>0?`<span class="lbar">PTO</span>`:''}</div>`;});
+    h+="</div>";
+  }
+  return h+"</div>";
+}
+
+function roleRows(cols){
+  let html="";
+  ROLES.forEach(r=>{
+    const headcount=PEOPLE.filter(p=>p.role===r.id).length;
+    html+=`<div class="prow" data-rid="${r.id}" style="height:58px">
+      <div class="name">
+        <span class="av-sq" style="background:${r.color};border-radius:9px">${r.name[0]}</span>
+        <span class="nmeta"><span class="nm">${r.name}</span>
+        <span class="nr"><span class="pill">${headcount} people</span></span></span>
+      </div>`;
+    cols.forEach(c=>{
+      let cap=0,com=0,pipe=0;
+      c.weeks.forEach(i=>{cap+=roleCapacity(r.id,i);com+=roleCommitted(r.id,i);pipe+=PIPELINE[r.id][i];});
+      const n=c.weeks.length; cap/=n;com/=n;pipe/=n;
+      const ratio=cap>0?com/cap:0;const band=utilBand(ratio);
+      const fill=band?`<span class="fill" style="background:${cssv('--'+band.bg.replace('--',''))};opacity:.5"></span>`:"";
+      const comColor=band?cssv('--'+band.fg.replace('--','')):"var(--ink)";
+      const show=v=>state.unit==="percent"?(cap>0?Math.round(v/cap*100):0)+"%":Math.round(v);
+      html+=`<div class="cell role${c.now?' now':''}" data-rid="${r.id}" data-wk="${c.weeks.join(',')}">${fill}
+        <span class="r1" title="capacity available">${show(cap)}</span>
+        <span class="rdiv"></span>
+        <span class="r2" style="color:${comColor}" title="committed to people">${show(com)}</span>
+        <span class="rdiv"></span>
+        <span class="r3" title="pipeline demand, unassigned">+${show(pipe)}</span>
+      </div>`;
+    });
+    html+="</div>";
+  });
+  return html;
+}
+
+function teamRows(cols){
+  let html="";
+  TEAMS.forEach(t=>{
+    const members=teamMembers(t.id);
+    const over=teamOverCount(t.id);
+    const exp=state.expanded.has(t.id);
+    html+=`<div class="prow${exp?" expanded":""}" data-tid="${t.id}">
+      <div class="name">
+        <span class="chev" data-act="expand">▶</span>
+        <span class="av-sq" style="background:${t.color};border-radius:9px">${t.glyph}</span>
+        <span class="nmeta">
+          <span class="nm">${t.name}</span>
+          <span class="nr"><span class="pill">${members.length} people</span>${t.part} ${over?'<span class="flag-dot" title="'+over+' over-allocated"></span>':''}</span>
+        </span>
+      </div>`;
+    cols.forEach(c=>{
+      let cap=0,com=0;
+      members.forEach(p=>c.weeks.forEach(i=>{cap+=personPlannable(p,i);com+=personWeekTotal(p,i);}));
+      const avgCom=com/c.weeks.length;
+      const ratio=cap>0?com/cap:0;
+      const band=utilBand(ratio);
+      const fill=band?`<span class="fill" style="background:${cssv('--'+band.bg.replace('--',''))}"></span>`:"";
+      const fg=band?cssv('--'+band.fg.replace('--','')):"var(--empty-fg)";
+      const val=avgCom<0.5
+        ? `<span class="v" style="color:var(--empty-fg)">·</span>`
+        : `<span class="v" style="color:${fg}">${state.unit==="percent"?Math.round(ratio*100)+"%":Math.round(avgCom)}</span>`;
+      html+=`<div class="cell${band?'':' empty'}${c.now?' now':''}" data-tid="${t.id}" data-wk="${c.weeks.join(',')}">${fill}${val}</div>`;
+    });
+    html+="</div>";
+    if(exp)html+=teamLaneRows(t,cols);
+  });
+  return html;
+}
+
+function teamLaneRows(t,cols){
+  let h=`<div class="lanes" data-lanes="${t.id}">`;
+  teamMembers(t.id).forEach(p=>{
+    h+=`<div class="lane"><div class="lname" data-go="${p.id}" style="padding-left:30px;cursor:pointer">
+      <span class="av-sq" style="width:17px;height:17px;border-radius:5px;font-size:8px;background:${p.color}">${p.initials}</span>${p.name}
+      <span class="lh">${ROLES.find(r=>r.id===p.role).name}</span></div>`;
+    cols.forEach(c=>{
+      let com=0,cap=0;c.weeks.forEach(i=>{com+=personWeekTotal(p,i);cap+=personPlannable(p,i);});
+      const avg=com/c.weeks.length, ratio=cap>0?com/cap:0;
+      const band=utilBand(ratio);
+      const bg=band?cssv('--'+band.bg.replace('--','')):'transparent';
+      const fg=band?cssv('--'+band.fg.replace('--','')):'var(--empty-fg)';
+      const label=state.unit==="percent"?Math.round(ratio*100)+"%":Math.round(avg);
+      h+=`<div class="lcell">${avg>0.4?`<span class="lbar" style="background:${bg};color:${fg};opacity:1">${label}</span>`:''}</div>`;
+    });
+    h+="</div>";
+  });
+  return h+"</div>";
+}
+
+/* ---------- conflicts / signals ---------- */
+function personConflicts(p){
+  const out=[];
+  let overWeeks=[];
+  for(let i=NOW;i<NWEEKS;i++){const plan=personPlannable(p,i);const a=personWeekTotal(p,i);
+    if(plan>0&&a/plan>1.0)overWeeks.push(i);}
+  if(overWeeks.length){
+    const d=weekDate(overWeeks[0]);
+    out.push({type:"warn",t:`<b>Over-allocated</b> for ${overWeeks.length} week${overWeeks.length>1?'s':''}, starting the week of ${MON[d.getMonth()]} ${d.getDate()}. Committed work exceeds plannable hours.`});
+  }
+  // context switching
+  let frag=0;for(let i=NOW;i<NWEEKS;i++)if(personProjectsActive(p,i)>=3)frag++;
+  if(frag>=2)out.push({type:"info",t:`<b>Context switching</b> — active on 3+ projects in ${frag} of the next weeks. Fragmented focus reduces effective throughput.`});
+  // PTO collision
+  for(let i=NOW;i<NWEEKS;i++)if(p.pto[i]&&personWeekTotal(p,i)>0){const d=weekDate(i);
+    out.push({type:"warn",t:`<b>Allocation during PTO</b> — work is still booked the week of ${MON[d.getMonth()]} ${d.getDate()} while ${p.name.split(' ')[0]} is out.`});break;}
+  return out;
+}
+
+/* ============================================================
+   INTERACTION
+   ============================================================ */
+function wireGrid(){
+  document.querySelectorAll(".prow[data-pid]").forEach(row=>{
+    const pid=row.dataset.pid;
+    row.querySelector(".name").addEventListener("click",e=>{
+      if(e.target.closest('[data-act="expand"]')){toggleExpand(pid);return;}
+      openPerson(pid);
+    });
+    row.querySelectorAll(".cell[data-pid]").forEach(c=>{
+      c.addEventListener("click",()=>openPerson(pid));
+    });
+  });
+  document.querySelectorAll(".prow[data-rid]").forEach(row=>{
+    row.addEventListener("click",()=>openRole(row.dataset.rid));
+  });
+  document.querySelectorAll(".prow[data-tid]").forEach(row=>{
+    const tid=row.dataset.tid;
+    row.querySelector(".name").addEventListener("click",e=>{
+      if(e.target.closest('[data-act="expand"]')){toggleExpand(tid);return;}
+      openTeam(tid);
+    });
+    row.querySelectorAll(".cell[data-tid]").forEach(c=>c.addEventListener("click",()=>openTeam(tid)));
+  });
+  // member lane name -> open that person
+  document.querySelectorAll(".lane .lname[data-go]").forEach(el=>{
+    el.addEventListener("click",e=>{e.stopPropagation();openPerson(el.dataset.go);});
+  });
+  // inline edit on lane cells
+  document.querySelectorAll(".lcell[data-proj]").forEach(c=>{
+    c.addEventListener("click",e=>{e.stopPropagation();editLaneCell(c);});
+  });
+}
+
+function toggleExpand(pid){
+  if(state.expanded.has(pid))state.expanded.delete(pid);else state.expanded.add(pid);
+  renderBody();
+}
+
+function editLaneCell(cell){
+  if(cell.querySelector("input"))return;
+  const pid=cell.dataset.pid, proj=cell.dataset.proj;
+  const weeks=cell.dataset.wk.split(',').map(Number);
+  const p=PEOPLE.find(x=>x.id===pid);
+  let cur=0;weeks.forEach(i=>cur+=p.alloc[proj].w[i]||0);cur=Math.round(cur/weeks.length);
+  cell.innerHTML=`<input type="number" value="${cur}" min="0" step="2">`;
+  const inp=cell.querySelector("input");inp.focus();inp.select();
+  const commit=()=>{
+    const v=Math.max(0,Math.round(+inp.value||0));
+    weeks.forEach(i=>{p.alloc[proj].w[i]=v;});
+    renderBody();
+    // keep this person expanded already true
+  };
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")commit();if(e.key==="Escape")renderBody();});
+  inp.addEventListener("blur",commit);
+}
+
+/* ============================================================
+   DETAIL PANELS
+   ============================================================ */
+const scrim=document.getElementById("scrim"),panel=document.getElementById("panel");
+function showPanel(html){panel.innerHTML=html;scrim.classList.add("on");panel.classList.add("on");}
+function closePanel(){scrim.classList.remove("on");panel.classList.remove("on");}
+scrim.addEventListener("click",closePanel);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closePanel();});
+
+function openPerson(pid){
+  const p=PEOPLE.find(x=>x.id===pid);
+  // next 12 weeks summary
+  let alloc12=0,plan12=0;for(let i=NOW;i<Math.min(NWEEKS,NOW+12);i++){alloc12+=personWeekTotal(p,i);plan12+=personPlannable(p,i);}
+  const avgRatio=plan12>0?alloc12/plan12:0;
+  const conflicts=personConflicts(p);
+
+  // timeline lanes (next 16 weeks)
+  const tlWeeks=[...Array(16).keys()].map(k=>NOW+k).filter(i=>i<NWEEKS);
+  const projIds=Object.keys(p.alloc);
+  let tlHtml="";
+  projIds.forEach(pjId=>{
+    const pj=PROJECTS.find(x=>x.id===pjId);
+    let any=tlWeeks.some(i=>(p.alloc[pjId].w[i]||0)>0);if(!any)return;
+    tlHtml+=`<div class="tl-row"><span class="tl-label"><span class="sw" style="background:${pj.color}"></span>${pj.name}</span><span class="tl-track">`;
+    tlWeeks.forEach(i=>{const h=p.alloc[pjId].w[i]||0;const o=Math.min(1,h/Math.max(1,p.plannable));
+      tlHtml+=`<span class="tk" style="background:${pj.color};opacity:${h>0?0.25+0.75*o:0.08}" title="${h}h"></span>`;});
+    tlHtml+="</span></div>";
+  });
+  // PTO lane
+  if(tlWeeks.some(i=>p.pto[i])){
+    tlHtml+=`<div class="tl-row"><span class="tl-label"><span class="sw" style="background:#9C8F78"></span>Time off</span><span class="tl-track">`;
+    tlWeeks.forEach(i=>{tlHtml+=`<span class="tk" style="background:${p.pto[i]?'repeating-linear-gradient(45deg,#9C8F78,#9C8F78 2px,#cabfa9 2px,#cabfa9 4px)':'transparent'};opacity:${p.pto[i]?1:.08}"></span>`;});
+    tlHtml+="</span></div>";
+  }
+
+  // plannable breakdown
+  const b=p.breakdown;const bcats=[
+    ["Project work",b.project,"#3E7CB1"],["Meetings",b.meetings,"#C9A23B"],
+    ["Management",b.mgmt,"#8E5BA6"],["On-call",b.oncall,"#2F8C82"],["Admin",b.admin,"#9C8F78"]];
+  const wsum=p.weekly;
+  let pbar="",pleg="";
+  bcats.forEach(([n,v,c])=>{if(v<=0)return;pbar+=`<span class="seg-b" style="background:${c};flex:${v}">${v>=4?v:''}</span>`;
+    pleg+=`<span class="pl"><span class="sw" style="background:${c}"></span>${n}<b>${v}h</b></span>`;});
+
+  // allocation list (current week)
+  let allocList="";
+  projIds.forEach(pjId=>{
+    const pj=PROJECTS.find(x=>x.id===pjId);const h=p.alloc[pjId].w[NOW]||0;
+    allocList+=`<div class="alloc"><span class="sw" style="background:${pj.color}"></span>
+      <span class="anm">${pj.name}</span>
+      <span class="apat">${p.alloc[pjId].pattern}</span>
+      <span class="ah"><input type="number" value="${h}" min="0" step="2" data-pa="${pjId}">h</span></div>`;
+  });
+
+  showPanel(`
+    <div class="ph">
+      <button class="iconbtn edit" id="editPersonBtn" title="Edit teammate">✎</button>
+      <button class="close" onclick="closePanel()">×</button>
+      <div class="ph-top">
+        <span class="av-lg" style="background:${p.color}">${p.initials}</span>
+        <div><h2>${p.name}</h2><div class="sub">${p.title} · <span style="color:${TEAMS.find(t=>t.id===p.team).color};font-weight:600">${TEAMS.find(t=>t.id===p.team).name}</span> team</div></div>
+      </div>
+      <div class="ph-stats">
+        <div class="st"><div class="lab">Weekly hrs</div><div class="num">${p.weekly}<small>h</small></div></div>
+        <div class="st"><div class="lab">Plannable</div><div class="num">${p.plannable}<small>h</small></div></div>
+        <div class="st"><div class="lab">Next 12 wks</div><div class="num" style="color:${cssv('--'+(utilBand(avgRatio)||{fg:'--ink'}).fg.replace('--',''))}">${Math.round(avgRatio*100)}<small>%</small></div></div>
+      </div>
+    </div>
+    <div class="pbody">
+      <div class="sec"><h3>Allocation timeline · next 16 weeks</h3><div class="tl">${tlHtml||'<span class="empty-note">No upcoming allocations.</span>'}</div></div>
+
+      <div class="sec"><h3>Where the week goes</h3>
+        <div class="pbar">${pbar}</div>
+        <div class="pblegend">${pleg}</div>
+        <p style="margin-top:12px;font-size:11.5px;color:var(--ink-3)">${p.weekly}h on paper → only <b style="color:var(--ink-2)">${p.plannable}h</b> are plannable once overhead is removed. Over-allocation reflects that reality.</p>
+      </div>
+
+      <div class="sec"><h3>Conflicts & signals</h3>
+        ${conflicts.length?conflicts.map(c=>`<div class="conflict ${c.type}"><span class="ico">${c.type==='warn'?'!':'i'}</span><span class="ctxt">${c.t}</span></div>`).join(''):'<span class="empty-note">No conflicts detected over the planning horizon. Healthy and balanced.</span>'}
+      </div>
+
+      <div class="sec"><h3>Allocations · this week <span class="kbd" style="margin-left:auto">editable</span></h3>
+        ${allocList||'<span class="empty-note">Unallocated this week.</span>'}
+      </div>
+    </div>
+  `);
+  // wire allocation editing
+  panel.querySelectorAll("input[data-pa]").forEach(inp=>{
+    inp.addEventListener("change",()=>{const pjId=inp.dataset.pa;p.alloc[pjId].w[NOW]=Math.max(0,Math.round(+inp.value||0));renderBody();openPerson(pid);});
+  });
+  document.getElementById("editPersonBtn").addEventListener("click",()=>openPersonForm(pid));
+}
+
+function openRole(rid){
+  const r=ROLES.find(x=>x.id===rid);
+  const team=PEOPLE.filter(p=>p.role===rid);
+  // next 12 wk
+  let cap=0,com=0,pipe=0;for(let i=NOW;i<Math.min(NWEEKS,NOW+12);i++){cap+=roleCapacity(rid,i);com+=roleCommitted(rid,i);pipe+=PIPELINE[rid][i];}
+  const ratio=cap>0?com/cap:0;
+
+  // per-project demand on this role (committed by role members) + pipeline gap
+  const projDemand={};
+  team.forEach(p=>{for(const k in p.alloc){let s=0;for(let i=NOW;i<Math.min(NWEEKS,NOW+12);i++)s+=p.alloc[k].w[i]||0;projDemand[k]=(projDemand[k]||0)+s;}});
+  const maxd=Math.max(1,...Object.values(projDemand),pipe);
+  let demandHtml="";
+  Object.keys(projDemand).sort((a,b)=>projDemand[b]-projDemand[a]).forEach(k=>{
+    const pj=PROJECTS.find(x=>x.id===k);const v=projDemand[k];
+    demandHtml+=`<div class="demand-row"><span class="drole" style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:${pj.color}"></span>${pj.name}</span>
+      <span class="dtrack"><span class="filled" style="width:${v/maxd*100}%"></span></span>
+      <span class="dnums">${Math.round(v)}h</span></div>`;
+  });
+  // pipeline gap row
+  demandHtml+=`<div class="demand-row" style="border-style:dashed"><span class="drole" style="color:var(--accent)">Pipeline</span>
+    <span class="dtrack"><span class="gap" style="width:${pipe/maxd*100}%"></span></span>
+    <span class="dnums" style="color:var(--accent)">+${Math.round(pipe)}h</span></div>`;
+
+  // assigned people
+  let peopleHtml="";
+  team.forEach(p=>{const a=aggPerson(p,[...Array(12).keys()].map(k=>NOW+k).filter(i=>i<NWEEKS));
+    const band=utilBand(a.ratio);
+    peopleHtml+=`<div class="alloc" style="cursor:pointer" data-go="${p.id}"><span class="av-sq" style="background:${p.color};width:26px;height:26px;border-radius:7px;font-size:10px">${p.initials}</span>
+      <span class="anm">${p.name}</span>
+      <span class="apat" style="background:${band?cssv('--'+band.bg.replace('--','')):'var(--paper-3)'};color:${band?cssv('--'+band.fg.replace('--','')):'var(--ink-3)'}">${Math.round(a.ratio*100)}%</span>
+      <span class="ah">${Math.round(a.avgAlloc)}h</span></div>`;
+  });
+
+  showPanel(`
+    <div class="ph">
+      <button class="close" onclick="closePanel()">×</button>
+      <div class="ph-top">
+        <span class="av-lg" style="background:${r.color}">${r.name[0]}</span>
+        <div><h2>${r.name}</h2><div class="sub">${team.length} people · discipline capacity</div></div>
+      </div>
+      <div class="ph-stats">
+        <div class="st"><div class="lab">Capacity/wk</div><div class="num">${Math.round(cap/12)}<small>h</small></div></div>
+        <div class="st"><div class="lab">Committed/wk</div><div class="num" style="color:${cssv('--'+(utilBand(ratio)||{fg:'--ink'}).fg.replace('--',''))}">${Math.round(com/12)}<small>h</small></div></div>
+        <div class="st"><div class="lab">Pipeline/wk</div><div class="num" style="color:var(--accent)">+${Math.round(pipe/12)}<small>h</small></div></div>
+      </div>
+    </div>
+    <div class="pbody">
+      <div class="sec"><h3>Demand by project · next 12 weeks</h3>${demandHtml}
+        <p style="margin-top:12px;font-size:11.5px;color:var(--ink-3)">Solid bars are committed to named people. The hatched <b style="color:var(--accent)">pipeline</b> bar is demand with no one on it yet — that's the headcount &amp; prioritization conversation.</p>
+      </div>
+      <div class="sec"><h3>Assigned people</h3>${peopleHtml}</div>
+    </div>
+  `);
+  panel.querySelectorAll("[data-go]").forEach(el=>el.addEventListener("click",()=>openPerson(el.dataset.go)));
+}
+
+function openTeam(tid){
+  const t=TEAMS.find(x=>x.id===tid);
+  const members=teamMembers(tid);
+  const wks=[...Array(12).keys()].map(k=>NOW+k).filter(i=>i<NWEEKS);
+  let cap=0,com=0;wks.forEach(i=>members.forEach(p=>{cap+=personPlannable(p,i);com+=personWeekTotal(p,i);}));
+  const ratio=cap>0?com/cap:0;
+
+  // role make-up chips
+  const byRole={};members.forEach(p=>byRole[p.role]=(byRole[p.role]||0)+1);
+  const makeup=ROLES.filter(r=>byRole[r.id]).map(r=>
+    `<span class="pl" style="font-size:11.5px"><span class="sw" style="background:${r.color}"></span>${r.name}<b>${byRole[r.id]}</b></span>`).join('');
+
+  // project mix across members
+  const mix={};members.forEach(p=>{for(const k in p.alloc){let s=0;wks.forEach(i=>s+=p.alloc[k].w[i]||0);if(s>0)mix[k]=(mix[k]||0)+s;}});
+  const maxd=Math.max(1,...Object.values(mix));
+  const mixHtml=Object.keys(mix).sort((a,b)=>mix[b]-mix[a]).map(k=>{
+    const pj=PROJECTS.find(x=>x.id===k);const v=mix[k];
+    return `<div class="demand-row"><span class="drole" style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:${pj.color}"></span>${pj.name}</span>
+      <span class="dtrack"><span class="filled" style="width:${v/maxd*100}%;background:${pj.color}40"></span></span>
+      <span class="dnums">${Math.round(v)}h</span></div>`;}).join('')
+    || '<span class="empty-note">No committed project work in the next 12 weeks.</span>';
+
+  // members
+  const memHtml=members.map(p=>{
+    const a=aggPerson(p,wks);const band=utilBand(a.ratio);
+    return `<div class="alloc" style="cursor:pointer" data-go="${p.id}"><span class="av-sq" style="background:${p.color};width:26px;height:26px;border-radius:7px;font-size:10px">${p.initials}</span>
+      <span class="anm">${p.name}<span style="color:var(--ink-3);font-weight:400"> · ${p.title}</span></span>
+      <span class="apat" style="background:${band?cssv('--'+band.bg.replace('--','')):'var(--paper-3)'};color:${band?cssv('--'+band.fg.replace('--','')):'var(--ink-3)'}">${Math.round(a.ratio*100)}%</span>
+      <span class="ah">${Math.round(a.avgAlloc)}h</span></div>`;}).join('');
+
+  // attention
+  const over=members.filter(p=>{for(let i=NOW;i<NWEEKS;i++){const pl=personPlannable(p,i);if(pl>0&&personWeekTotal(p,i)/pl>1)return true;}return false;});
+  const attHtml=over.length
+    ? over.map(p=>`<div class="conflict warn"><span class="ico">!</span><span class="ctxt"><b>${p.name}</b> (${ROLES.find(r=>r.id===p.role).name}) is over-allocated within the planning horizon.</span></div>`).join('')
+    : '<span class="empty-note">Every member is within capacity. Healthy team.</span>';
+
+  showPanel(`
+    <div class="ph">
+      <button class="close" onclick="closePanel()">×</button>
+      <div class="ph-top">
+        <span class="av-lg" style="background:${t.color}">${t.glyph}</span>
+        <div><h2>${t.name}</h2><div class="sub">${t.part} · ${members.length} people</div></div>
+      </div>
+      <div class="ph-stats">
+        <div class="st"><div class="lab">Capacity/wk</div><div class="num">${Math.round(cap/wks.length)}<small>h</small></div></div>
+        <div class="st"><div class="lab">Committed/wk</div><div class="num" style="color:${cssv('--'+(utilBand(ratio)||{fg:'--ink'}).fg.replace('--',''))}">${Math.round(com/wks.length)}<small>h</small></div></div>
+        <div class="st"><div class="lab">Next 12 wks</div><div class="num" style="color:${cssv('--'+(utilBand(ratio)||{fg:'--ink'}).fg.replace('--',''))}">${Math.round(ratio*100)}<small>%</small></div></div>
+      </div>
+    </div>
+    <div class="pbody">
+      <div class="sec"><h3>Make-up</h3><div class="pblegend" style="grid-template-columns:1fr 1fr 1fr">${makeup}</div></div>
+      <div class="sec"><h3>Project mix · next 12 weeks</h3>${mixHtml}
+        <p style="margin-top:12px;font-size:11.5px;color:var(--ink-3)">Where this team's committed hours are going. A team spread thin across many projects is a focus risk.</p>
+      </div>
+      <div class="sec"><h3>Members</h3>${memHtml}</div>
+      <div class="sec"><h3>Needs attention</h3>${attHtml}</div>
+    </div>
+  `);
+  panel.querySelectorAll("[data-go]").forEach(el=>el.addEventListener("click",()=>openPerson(el.dataset.go)));
+}
+
+/* ---------- create / edit / delete person ---------- */
+const DEFAULT_OVERHEAD=profile("ic").weekly-profile("ic").plannable; // for brand-new teammates
+function openPersonForm(pid){
+  const editing=!!pid;
+  const p=editing?PEOPLE.find(x=>x.id===pid):null;
+  // working draft
+  const draft={
+    name:p?p.name:"",
+    role:p?p.role:ROLES[0].id,
+    team:p?p.team:TEAMS[0].id,
+    weekly:p?p.weekly:40,
+    overhead:p?p.overhead:DEFAULT_OVERHEAD,
+  };
+  const PRESETS=[40,30,20];
+  const roleOpts=ROLES.map(r=>`<option value="${r.id}"${r.id===draft.role?' selected':''}>${r.name}</option>`).join('');
+  const teamOpts=TEAMS.map(t=>`<option value="${t.id}"${t.id===draft.team?' selected':''}>${t.name} — ${t.part}</option>`).join('');
+
+  showPanel(`
+    <div class="ph">
+      <button class="close" onclick="closePanel()">×</button>
+      <div class="ph-top">
+        <span class="av-lg" id="fAv" style="background:${p?p.color:'var(--ink-3)'}">${p?p.initials:'+'}</span>
+        <div><h2>${editing?'Edit teammate':'Add teammate'}</h2>
+          <div class="sub">${editing?'Update details & weekly capacity':'Configure their discipline, team & capacity'}</div></div>
+      </div>
+    </div>
+    <div class="pbody">
+      <div class="sec">
+        <h3>Details</h3>
+        <div class="field" id="fNameField">
+          <label>Name</label>
+          <input type="text" id="fName" value="${escapeAttr(draft.name)}" placeholder="e.g. Alex Rivera" autocomplete="off">
+        </div>
+        <div class="field two">
+          <div><label>Discipline</label><select id="fRole">${roleOpts}</select></div>
+          <div><label>Team</label><select id="fTeam">${teamOpts}</select></div>
+        </div>
+      </div>
+      <div class="sec">
+        <h3>Weekly capacity</h3>
+        <div class="hours-pick">
+          <div class="seg" id="fPresets">${PRESETS.map(h=>`<button data-h="${h}"${h===draft.weekly?' class="on"':''}>${h}h</button>`).join('')}</div>
+          <span class="custom">or <input type="number" id="fHours" min="1" max="60" step="1" value="${draft.weekly}"> hrs/wk</span>
+        </div>
+        <div class="readout" id="fReadout"></div>
+      </div>
+      <div class="form-actions" id="fActions">
+        <button class="btn primary" id="fSave">${editing?'Save changes':'Add teammate'}</button>
+        <button class="btn" onclick="closePanel()">Cancel</button>
+        ${editing?'<button class="btn danger" id="fDelete">Delete</button>':''}
+      </div>
+    </div>
+  `);
+
+  const $=id=>document.getElementById(id);
+  const presets=$("fPresets"), hours=$("fHours"), readout=$("fReadout"), avatar=$("fAv");
+  const updateReadout=()=>{
+    const w=Math.max(0,Math.round(+hours.value||0));
+    const plan=Math.max(0,w-draft.overhead);
+    readout.innerHTML=`<b>${w}h</b> on paper → <b class="big">${plan}h</b> plannable after ~${draft.overhead}h of meetings, management &amp; admin.`;
+    [...presets.children].forEach(b=>b.classList.toggle("on",+b.dataset.h===w));
+  };
+  const setAvatar=()=>{const n=$("fName").value;avatar.textContent=n.trim()?initialsOf(n):'+';};
+  presets.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;hours.value=b.dataset.h;updateReadout();});
+  hours.addEventListener("input",updateReadout);
+  $("fName").addEventListener("input",setAvatar);
+  updateReadout();
+
+  $("fSave").addEventListener("click",()=>{
+    const name=$("fName").value.trim();
+    if(!name){$("fNameField").classList.add("invalid");$("fName").focus();return;}
+    const role=$("fRole").value, team=$("fTeam").value;
+    const weekly=Math.max(1,Math.round(+hours.value||0));
+    if(editing){
+      p.name=name; p.initials=initialsOf(name);
+      p.role=role; p.team=team; p.weekly=weekly;
+      p.title=roleTitle(role,p.kind);
+      recalcPerson(p);
+    }else{
+      createPerson({name,role,team,weekly});
+    }
+    renderBody(); renderAvatars();
+    if(editing) openPerson(p.id); else closePanel();
+  });
+
+  const del=$("fDelete");
+  if(del) del.addEventListener("click",()=>{
+    const actions=$("fActions");
+    actions.innerHTML=`<span class="confirm">Remove <b>${escapeHtml(p.name)}</b> &amp; all allocations?
+      <button class="btn danger" id="fDelYes">Delete</button>
+      <button class="btn" id="fDelNo">Keep</button></span>`;
+    $("fDelNo").addEventListener("click",()=>openPersonForm(pid));
+    $("fDelYes").addEventListener("click",()=>{deletePerson(pid);renderBody();renderAvatars();closePanel();});
+  });
+}
+function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function escapeAttr(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+window.closePanel=closePanel;
+
+/* ============================================================
+   TOOLBAR + LEGEND + INIT
+   ============================================================ */
+function seg(id,attr,fn){
+  document.getElementById(id).addEventListener("click",e=>{
+    const b=e.target.closest("button");if(!b)return;
+    [...e.currentTarget.children].forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");fn(b.dataset[attr]);
+  });
+}
+seg("viewSeg","v",v=>{state.view=v;state.expanded.clear();
+  document.getElementById("bigQ").textContent={person:"Who's overloaded right now?",team:"Which teams are stretched thin?",role:"Where are the gaps by role?"}[v];
+  renderBody();});
+seg("rangeSeg","r",r=>{state.range=r;renderBody();});
+seg("unitSeg","u",u=>{state.unit=u;renderBody();});
+document.getElementById("addPersonBtn").addEventListener("click",()=>openPersonForm(null));
+
+function renderLegend(){
+  const items=[["--room-bg","Room"],["--healthy-bg","Healthy"],["--full-bg","Full"],["--over-bg","Over"]];
+  document.getElementById("legend").innerHTML=items.map(([c,l])=>`<span class="grp"><span class="sw" style="background:${cssv(c)}"></span>${l}</span>`).join("");
+}
+function renderAvatars(){
+  document.getElementById("teamCount").textContent=PEOPLE.length;
+  const shown=PEOPLE.slice(0,6).map(p=>`<span class="av" style="background:${p.color}">${p.initials}</span>`).join("");
+  const extra=PEOPLE.length>6?`<span class="av" style="background:var(--ink-3)">+${PEOPLE.length-6}</span>`:"";
+  document.getElementById("avatars").innerHTML=shown+extra;
+}
+
+renderLegend();renderAvatars();renderBody();
+
+// scroll so "this week" is comfortably in view on load
+requestAnimationFrame(()=>{const sc=document.getElementById("scroller");const colw=parseInt(cssv("--col-w"));const namew=236;sc.scrollLeft=Math.max(0,NOW*colw - namew/2);});
+</script>
+</body>
+</html>
